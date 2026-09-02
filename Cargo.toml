@@ -1,0 +1,33 @@
+[package]
+name = "packetlens"
+version = "0.1.0"
+edition = "2021"
+description = "A live, readable packet inspector: pcap decode, connection tracking, and plain-English flow summaries. No bundled Wireshark."
+license = "MIT"
+authors = ["Prabesh Sharma"]
+repository = "https://github.com/hellpuffyt/packetlens"
+readme = "README.md"
+keywords = ["pcap", "networking", "packet", "sniffer", "protocol"]
+categories = ["network-programming", "command-line-utilities"]
+
+[[bin]]
+name = "packetlens"
+path = "src/main.rs"
+
+[[example]]
+name = "gen_fixture"
+path = "examples/gen_fixture.rs"
+
+[dependencies]
+libc = { version = "0.2", optional = true }
+ratatui = { version = "0.29", optional = true }
+crossterm = { version = "0.28", optional = true }
+
+[features]
+live-capture = ["dep:libc"]
+tui = ["dep:ratatui", "dep:crossterm"]
+
+[dev-dependencies]
+
+[profile.release]
+opt-level = 3

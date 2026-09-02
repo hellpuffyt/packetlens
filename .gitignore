@@ -1,0 +1,5 @@
+/target
+*.pdb
+.idea/
+.vscode/
+*.swp
