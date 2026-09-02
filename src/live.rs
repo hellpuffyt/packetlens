@@ -74,11 +74,7 @@ pub fn capture_loop(iface: &str) -> io::Result<()> {
 
 fn open_raw_socket(iface: &str) -> io::Result<OwnedFd> {
     unsafe {
-        let raw_fd = libc::socket(
-            libc::AF_PACKET,
-            libc::SOCK_RAW,
-            (ETH_P_ALL as u16).to_be() as i32,
-        );
+        let raw_fd = libc::socket(libc::AF_PACKET, libc::SOCK_RAW, ETH_P_ALL.to_be() as i32);
         if raw_fd < 0 {
             return Err(io::Error::last_os_error());
         }
@@ -87,7 +83,7 @@ fn open_raw_socket(iface: &str) -> io::Result<OwnedFd> {
         let if_index = if_nametoindex(iface)?;
         let mut addr: libc::sockaddr_ll = mem::zeroed();
         addr.sll_family = libc::AF_PACKET as u16;
-        addr.sll_protocol = (ETH_P_ALL as u16).to_be();
+        addr.sll_protocol = ETH_P_ALL.to_be();
         addr.sll_ifindex = if_index as i32;
 
         let ret = libc::bind(
