@@ -4,6 +4,7 @@
 ///
 /// This is the same algorithm used by IPv4 header checksums, and (with a
 /// pseudo-header prepended) by TCP and UDP checksums.
+#[allow(unknown_lints, clippy::chunks_exact_to_as_chunks)] // lint is new in some toolchains; `as_chunks` isn't stable on our MSRV
 pub fn internet_checksum(data: &[u8]) -> u16 {
     let mut sum: u32 = 0;
     let mut chunks = data.chunks_exact(2);
