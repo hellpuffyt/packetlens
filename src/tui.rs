@@ -99,7 +99,7 @@ mod render {
         result
     }
 
-    fn event_loop<B: ratatui::backend::Backend>(
+    fn event_loop<B: ratatui::backend::Backend<Error = io::Error>>(
         terminal: &mut Terminal<B>,
         app: &mut AppState,
     ) -> io::Result<()> {
