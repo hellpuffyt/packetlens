@@ -15,10 +15,10 @@
 //!   doing.
 //!
 //! Live capture from a real network interface is available on Linux behind
-//! the `live-capture` cargo feature (see [`live`]); it needs `CAP_NET_RAW`
+//! the `live-capture` cargo feature (see the `live` module); it needs `CAP_NET_RAW`
 //! or root and is not part of the default, always-testable build. A
 //! `ratatui`-based interactive viewer is available behind the `tui` feature
-//! (see [`tui`]).
+//! (see the `tui` module).
 
 pub mod checksum;
 pub mod decode;
