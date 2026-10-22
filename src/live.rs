@@ -26,8 +26,10 @@ use std::time::{SystemTime, UNIX_EPOCH};
 const ETH_P_ALL: u16 = 0x0003;
 
 /// Opens a raw `AF_PACKET`/`SOCK_RAW` socket bound to `iface`, decodes each
-/// frame as it arrives, feeds it into a [`FlowTracker`], and prints a
-/// one-line plain-English summary whenever a flow's picture changes.
+/// frame as it arrives, feeds it into a [`FlowTracker`], and prints the
+/// current plain-English summary of that packet's flow after every decoded
+/// IP packet. Flow state is kept for the whole run (memory grows with the
+/// number of distinct flows seen).
 ///
 /// Runs until interrupted (Ctrl-C) or a read error occurs. Requires
 /// `CAP_NET_RAW`; without it `socket(2)` fails with `EPERM`.
@@ -38,6 +40,9 @@ pub fn capture_loop(iface: &str) -> io::Result<()> {
     let mut buf = vec![0u8; 65536];
 
     loop {
+        // SAFETY: `fd` is an open socket owned by this function, and the
+        // pointer/length pair describes `buf`, a live, exclusively borrowed
+        // allocation of exactly `buf.len()` bytes.
         let n = unsafe {
             libc::recv(
                 fd.as_raw_fd(),
@@ -55,24 +60,21 @@ pub fn capture_loop(iface: &str) -> io::Result<()> {
             .unwrap_or_default()
             .as_micros() as u64;
         if let Ok(pkt) = decode_packet(ts, n as u32, n as u32, data) {
-            tracker.ingest(&pkt);
-            if let Some(ip) = &pkt.ip {
-                // Find the flow this packet belongs to and print its
-                // current summary — cheap enough for interactive use, and
-                // keeps this module's only job as "wire it up", not
-                // duplicate the tracker's own lookup logic.
-                for flow in tracker.flows() {
-                    if flow.initiator.0 == ip.src() || flow.responder.0 == ip.src() {
-                        println!("{}", explain_flow(flow));
-                        break;
-                    }
-                }
+            // The tracker returns the flow this exact packet was accounted
+            // to (5-tuple match), not merely some flow sharing its source IP.
+            if let Some(flow) = tracker.ingest(&pkt) {
+                println!("{}", explain_flow(flow));
             }
         }
     }
 }
 
 fn open_raw_socket(iface: &str) -> io::Result<OwnedFd> {
+    // SAFETY: plain libc calls with valid arguments. `raw_fd` is checked
+    // before `OwnedFd` takes ownership (so it is closed exactly once, on every
+    // path); `addr` is a fully zero-initialised `sockaddr_ll` (all-zero is a
+    // valid value for this C struct) and the length passed to `bind` is its
+    // exact size.
     unsafe {
         let raw_fd = libc::socket(libc::AF_PACKET, libc::SOCK_RAW, ETH_P_ALL.to_be() as i32);
         if raw_fd < 0 {
@@ -105,6 +107,7 @@ fn if_nametoindex(iface: &str) -> io::Result<u32> {
             "interface name contains a NUL byte",
         )
     })?;
+    // SAFETY: `c_name` is a valid NUL-terminated C string that outlives the call.
     let index = unsafe { libc::if_nametoindex(c_name.as_ptr()) };
     if index == 0 {
         return Err(io::Error::new(
