@@ -24,6 +24,8 @@ use std::os::fd::{AsRawFd, FromRawFd, OwnedFd};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 const ETH_P_ALL: u16 = 0x0003;
+/// `sll_pkttype` of a frame this host sent (`<linux/if_packet.h>`).
+const PACKET_OUTGOING: u8 = 4;
 
 /// Opens a raw `AF_PACKET`/`SOCK_RAW` socket bound to `iface`, decodes each
 /// frame as it arrives, feeds it into a [`FlowTracker`], and prints the
@@ -40,19 +42,31 @@ pub fn capture_loop(iface: &str) -> io::Result<()> {
     let mut buf = vec![0u8; 65536];
 
     loop {
-        // SAFETY: `fd` is an open socket owned by this function, and the
+        // SAFETY: an all-zero `sockaddr_ll` is a valid value for this C struct.
+        let mut from: libc::sockaddr_ll = unsafe { mem::zeroed() };
+        let mut from_len = mem::size_of::<libc::sockaddr_ll>() as libc::socklen_t;
+        // SAFETY: `fd` is an open socket owned by this function; the
         // pointer/length pair describes `buf`, a live, exclusively borrowed
-        // allocation of exactly `buf.len()` bytes.
+        // allocation of exactly `buf.len()` bytes; and `from`/`from_len`
+        // describe a live `sockaddr_ll` of exactly `from_len` bytes.
         let n = unsafe {
-            libc::recv(
+            libc::recvfrom(
                 fd.as_raw_fd(),
                 buf.as_mut_ptr() as *mut libc::c_void,
                 buf.len(),
                 0,
+                &mut from as *mut libc::sockaddr_ll as *mut libc::sockaddr,
+                &mut from_len,
             )
         };
         if n < 0 {
             return Err(io::Error::last_os_error());
+        }
+        // On a loopback interface every packet is delivered twice: once as
+        // it is sent (PACKET_OUTGOING) and once as it is received. Count it
+        // once, as libpcap does.
+        if from.sll_hatype == libc::ARPHRD_LOOPBACK && from.sll_pkttype == PACKET_OUTGOING {
+            continue;
         }
         let data = &buf[..n as usize];
         let ts = SystemTime::now()
