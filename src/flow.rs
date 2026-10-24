@@ -117,17 +117,17 @@ impl FlowTracker {
         Self::default()
     }
 
-    pub fn ingest(&mut self, pkt: &DecodedPacket) {
-        let ip = match &pkt.ip {
-            Some(ip) => ip,
-            None => return, // non-IP traffic (ARP etc.) is not flow-tracked
-        };
+    /// Adds one packet and returns the flow it was accounted to (`None` for
+    /// traffic that is not flow-tracked, such as ARP).
+    pub fn ingest(&mut self, pkt: &DecodedPacket) -> Option<&FlowState> {
+        // Non-IP traffic (ARP etc.) is not flow-tracked.
+        let ip = pkt.ip.as_ref()?;
         let (protocol, src_port, dst_port) = match &pkt.transport {
             Transport::Tcp(t) => (Protocol::Tcp, t.src_port, t.dst_port),
             Transport::Udp(u) => (Protocol::Udp, u.src_port, u.dst_port),
             Transport::Icmp(_) => (Protocol::Icmp, 0, 0),
             Transport::Other(p) => (Protocol::Other(*p), 0, 0),
-            Transport::None => return,
+            Transport::None => return None,
         };
         let src = (ip.src(), src_port);
         let dst = (ip.dst(), dst_port);
@@ -216,11 +216,12 @@ impl FlowTracker {
                 }
             }
         }
+        Some(state)
     }
 
     pub fn ingest_all<'a>(&mut self, packets: impl IntoIterator<Item = &'a DecodedPacket>) {
         for pkt in packets {
-            self.ingest(pkt);
+            let _ = self.ingest(pkt);
         }
     }
 
@@ -284,6 +285,26 @@ pub struct ScanReport {
 /// like it was doing, based only on observable transport-layer behavior
 /// (handshake shape, byte balance, well-known ports) — not payload
 /// inspection or magic signatures.
+/// Makes attacker-controlled text (SNI, DNS names — straight off the wire)
+/// safe to print: control characters (terminal escape sequences, newlines)
+/// and invisible/bidirectional formatting characters are shown as `\u{..}`
+/// escapes instead of being interpreted by the terminal or reordering text.
+pub fn display_safe(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    for c in s.chars() {
+        let invisible = matches!(
+            c,
+            '\u{200B}'..='\u{200F}' | '\u{202A}'..='\u{202E}' | '\u{2066}'..='\u{2069}' | '\u{FEFF}'
+        );
+        if c.is_control() || invisible {
+            out.extend(c.escape_unicode());
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 pub fn explain_flow(flow: &FlowState) -> String {
     let a = format_endpoint(flow.initiator);
     let b = format_endpoint(flow.responder);
@@ -311,7 +332,7 @@ pub fn explain_flow(flow: &FlowState) -> String {
                     "left open at the end of the capture"
                 };
                 let hint_str = if let Some(sni) = &flow.tls_sni {
-                    format!(" TLS ClientHello asked for '{sni}' (SNI).")
+                    format!(" TLS ClientHello asked for '{}' (SNI).", display_safe(sni))
                 } else if let Some(s) = well_known_service(flow.initiator, flow.responder) {
                     format!(" Looks like {s}.")
                 } else {
@@ -344,7 +365,9 @@ pub fn explain_flow(flow: &FlowState) -> String {
                 let names = if flow.dns_queries.is_empty() {
                     String::new()
                 } else {
-                    format!(" Asked about: {}.", flow.dns_queries.join(", "))
+                    let names: Vec<String> =
+                        flow.dns_queries.iter().map(|n| display_safe(n)).collect();
+                    format!(" Asked about: {}.", names.join(", "))
                 };
                 format!(
                     "{a} -> {b}: one UDP request answered by one reply on port 53. Looks like a \
@@ -478,6 +501,69 @@ mod tests {
             }),
             payload: vec![],
         }
+    }
+
+    /// Regression: SNI and DNS names come straight off the wire and were
+    /// interpolated raw into the summary printed to the terminal, so a
+    /// crafted ClientHello could inject terminal escape sequences (or
+    /// bidi-override characters) into the analyst's screen.
+    #[test]
+    fn hostile_names_are_escaped_in_summaries() {
+        let client = Ipv4Addr::new(10, 0, 0, 5);
+        let server = Ipv4Addr::new(93, 184, 216, 34);
+        let mut tracker = FlowTracker::new();
+        let _ = tracker.ingest(&tcp_pkt(0, client, 5555, server, 443, TcpFlags::SYN.0, 60));
+        let _ = tracker.ingest(&tcp_pkt(
+            1,
+            server,
+            443,
+            client,
+            5555,
+            TcpFlags::SYN.0 | TcpFlags::ACK.0,
+            60,
+        ));
+        let _ = tracker.ingest(&tcp_pkt(2, client, 5555, server, 443, TcpFlags::ACK.0, 54));
+        let mut flow = tracker.flows()[0].clone();
+        flow.tls_sni = Some("evil\x1b]0;pwned\x07\x1b[2J\u{202E}moc.knab\n".into());
+        let text = explain_flow(&flow);
+        for bad in ['\x1b', '\x07', '\n', '\u{202E}'] {
+            assert!(!text.contains(bad), "{bad:?} leaked into {text:?}");
+        }
+        assert!(text.contains("\\u{1b}]0;pwned"), "{text}");
+        assert_eq!(display_safe("example.com"), "example.com");
+        assert_eq!(display_safe("bücher.example"), "bücher.example");
+    }
+
+    /// Regression: live capture printed the first flow that merely involved
+    /// the packet's source IP, so with two connections from one host the
+    /// summary shown was usually for the wrong connection. `ingest` now
+    /// returns the flow the packet was actually accounted to.
+    #[test]
+    fn ingest_returns_the_packets_own_flow() {
+        let client = Ipv4Addr::new(10, 0, 0, 5);
+        let server = Ipv4Addr::new(93, 184, 216, 34);
+        let mut tracker = FlowTracker::new();
+        let _ = tracker.ingest(&tcp_pkt(0, client, 5555, server, 80, TcpFlags::SYN.0, 60));
+        let second = tracker
+            .ingest(&tcp_pkt(1, client, 6666, server, 443, TcpFlags::SYN.0, 60))
+            .expect("tcp packet is tracked");
+        assert_eq!(second.initiator, (IpAddr::V4(client), 6666));
+        assert_eq!(second.responder, (IpAddr::V4(server), 443));
+        // A reply is accounted to the same flow, seen from the server side.
+        let reply = tracker
+            .ingest(&tcp_pkt(
+                2,
+                server,
+                443,
+                client,
+                6666,
+                TcpFlags::SYN.0 | TcpFlags::ACK.0,
+                60,
+            ))
+            .expect("tcp packet is tracked");
+        assert_eq!(reply.initiator, (IpAddr::V4(client), 6666));
+        assert!(reply.synack_seen);
+        assert_eq!(tracker.len(), 2);
     }
 
     #[test]

@@ -3,6 +3,31 @@
 All notable changes to this project are documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
+## [Unreleased]
+
+### Security
+- Text output, the TUI and `--json` summaries interpolated TLS SNI and DNS
+  names from packets verbatim, so a crafted capture or live packet could
+  inject terminal escape sequences or bidi-override characters; they are now
+  escaped (`flow::display_safe`). The JSON writer also escaped only `"`,
+  `\` and `\n`, producing invalid JSON for other control characters; all of
+  U+0000–U+001F are now escaped.
+- `tui` feature: upgraded `ratatui` 0.29 → 0.30 (default features off,
+  `crossterm` backend) and `crossterm` 0.28 → 0.29, removing `lru` 0.12
+  (RUSTSEC-2026-0002, RUSTSEC-2026-0253: unsound) and `paste`
+  (RUSTSEC-2024-0436: unmaintained) from the dependency tree. The `tui`
+  feature now needs Rust 1.88.
+- CI workflow now declares least-privilege `permissions: contents: read`.
+
+### Fixed
+- Live capture printed the summary of the first flow sharing the packet's
+  source IP, usually the wrong connection; `FlowTracker::ingest` now returns
+  the flow the packet was accounted to and the live loop prints that one.
+- `unsafe` blocks in `live.rs` now carry `SAFETY:` justifications.
+
+### Added
+- Deterministic fuzz tests (`tests/fuzz.rs`), `SECURITY.md`, `.editorconfig`.
+
 ## [0.1.0] - 2026-09-02
 
 ### Added

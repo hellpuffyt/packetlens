@@ -168,8 +168,9 @@ fn render_text(analysis: &packetlens::Analysis, scan_threshold: usize) -> String
     out
 }
 
-/// Hand-rolled minimal JSON writer (no serde dependency) — escapes only
-/// what the fixed schema below can ever contain: ASCII text with quotes.
+/// Hand-rolled minimal JSON string escaper (no serde dependency). Summaries
+/// can contain text taken from packets (SNI, DNS names), so every character
+/// JSON requires to be escaped (quote, backslash, U+0000–U+001F) is handled.
 fn json_escape(s: &str) -> String {
     let mut out = String::with_capacity(s.len() + 2);
     for c in s.chars() {
@@ -177,6 +178,9 @@ fn json_escape(s: &str) -> String {
             '"' => out.push_str("\\\""),
             '\\' => out.push_str("\\\\"),
             '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
             c => out.push(c),
         }
     }
@@ -259,4 +263,22 @@ fn run_live(_args: &[String]) -> ExitCode {
          `cargo build --features live-capture` on Linux and run with CAP_NET_RAW or root."
     );
     ExitCode::FAILURE
+}
+
+#[cfg(test)]
+mod tests {
+    use super::json_escape;
+
+    /// Regression: control characters other than `\n` were emitted raw,
+    /// producing invalid JSON for summaries containing packet-derived text.
+    #[test]
+    fn json_escape_handles_every_control_character() {
+        assert_eq!(json_escape("a\"b\\c"), "a\\\"b\\\\c");
+        assert_eq!(json_escape("\r\t\n"), "\\r\\t\\n");
+        assert_eq!(json_escape("\u{1b}[2J\u{0}"), "\\u001b[2J\\u0000");
+        for c in (0u8..0x20).map(char::from) {
+            let e = json_escape(&c.to_string());
+            assert!(e.starts_with('\\'), "{c:?} not escaped: {e:?}");
+        }
+    }
 }

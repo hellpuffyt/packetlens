@@ -41,6 +41,8 @@ cd packetlens
 cargo run -- fixtures/port_scan.pcap
 ```
 
+(Output abbreviated: long lines wrapped, remaining flows and ports elided.)
+
 ```
 packetlens: 8 packets decoded (0 failed to decode), 8 flow(s)
 
@@ -168,9 +170,10 @@ loop, not a second parser.
 ## Testing strategy
 
 ```sh
-cargo test                    # 39 unit tests, no fixtures needed
-cargo test --features tui     # + tui::AppState unit tests
+cargo test                    # 49 tests: 38 lib + 1 CLI unit, 7 fixture, 3 fuzz
+cargo test --features tui     # 52: + 3 tui::AppState unit tests (Rust >= 1.88)
 cargo test --test fixtures    # 7 integration tests against fixtures/*.pcap
+cargo test --test fuzz        # 3 deterministic robustness tests (mutated fixtures, random bytes)
 ```
 
 `fixtures/*.pcap` are real-shaped classic-format pcap files — not truncated
@@ -198,9 +201,18 @@ produced them. No fixture requires network access, root, or Npcap to
   arbitrary application protocols, no packet editing/replay.
 - Not a decryption tool — the TLS parser reads the plaintext ClientHello
   only; it does not, and structurally cannot, decrypt TLS traffic.
+- Not a long-running monitor yet — live capture keeps every flow it has
+  seen in memory for the whole run.
 - **Defensive/diagnostic use only.** This is a tool for understanding
   traffic you already have permission to observe (your own interface, a
   capture you were given), not for intercepting anyone else's.
+
+## Security
+
+Captures are untrusted input. Every parser is bounds-checked and fuzzed
+(`tests/fuzz.rs`), and names taken from packets (TLS SNI, DNS queries) are
+escaped before they reach your terminal or the JSON output. See
+[SECURITY.md](SECURITY.md) for the threat model and how to report issues.
 
 ## License
 
