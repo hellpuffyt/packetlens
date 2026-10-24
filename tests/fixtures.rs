@@ -4,7 +4,7 @@
 //! decode + conntrack + explanation pipeline is fully exercised on any
 //! platform CI happens to run on.
 
-use packetlens::decode::Transport;
+use packetlens::decode::{TcpFlags, Transport};
 use packetlens::{analyze, dns, tls};
 use std::net::IpAddr;
 
@@ -35,6 +35,38 @@ fn web_browsing_fixture_decodes_full_conversation() {
     assert!(explanation.contains("completed TCP handshake"));
     assert!(explanation.contains("HTTP"));
     assert!(explanation.contains("closed cleanly with FIN"));
+}
+
+#[test]
+fn web_browsing_fixture_sequence_numbers_are_consistent() {
+    // Every ACK must acknowledge exactly what the peer has sent so far
+    // (payload bytes, plus one for each SYN/FIN), as a real TCP stack does.
+    let bytes = load("web_browsing.pcap");
+    let analysis = analyze(&bytes).expect("fixture must parse");
+    let tcp: Vec<_> = analysis
+        .packets
+        .iter()
+        .map(|p| match &p.transport {
+            Transport::Tcp(h) => (h.clone(), p.payload.len() as u32),
+            other => panic!("expected TCP, got {other:?}"),
+        })
+        .collect();
+    let (mut next_client, mut next_server) = (0u32, 0u32);
+    for (i, (h, len)) in tcp.iter().enumerate() {
+        let from_client = h.src_port == 51000;
+        let consumed = len
+            + u32::from(h.flags.contains(TcpFlags::SYN))
+            + u32::from(h.flags.contains(TcpFlags::FIN));
+        if from_client {
+            next_client = h.sequence.wrapping_add(consumed);
+            if i > 0 {
+                assert_eq!(h.ack_number, next_server, "client packet {i}");
+            }
+        } else {
+            next_server = h.sequence.wrapping_add(consumed);
+            assert_eq!(h.ack_number, next_client, "server packet {i}");
+        }
+    }
 }
 
 #[test]

@@ -278,7 +278,8 @@ fn web_browsing_frames() -> Vec<Frame> {
         80,
         cport,
         5001 + response.len() as u32,
-        2001 + request.len() as u32,
+        // Acknowledges the request bytes plus the client's FIN.
+        1001 + request.len() as u32 + 1,
         FIN | ACK,
         &[],
     ));
