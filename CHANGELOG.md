@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - CI workflow now declares least-privilege `permissions: contents: read`.
 
 ### Fixed
+- `fixtures/web_browsing.pcap`: the server's closing FIN acknowledged
+  sequence number 2038 instead of 1039 (the request bytes plus the client's
+  FIN), a typo in `examples/gen_fixture.rs`. A fixture test now checks
+  every ACK in that capture against the peer's sequence space.
 - Live capture printed the summary of the first flow sharing the packet's
   source IP, usually the wrong connection; `FlowTracker::ingest` now returns
   the flow the packet was accounted to and the live loop prints that one.

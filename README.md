@@ -170,9 +170,9 @@ loop, not a second parser.
 ## Testing strategy
 
 ```sh
-cargo test                    # 49 tests: 38 lib + 1 CLI unit, 7 fixture, 3 fuzz
-cargo test --features tui     # 52: + 3 tui::AppState unit tests (Rust >= 1.88)
-cargo test --test fixtures    # 7 integration tests against fixtures/*.pcap
+cargo test                    # 50 tests: 38 lib + 1 CLI unit, 8 fixture, 3 fuzz
+cargo test --features tui     # 53: + 3 tui::AppState unit tests (Rust >= 1.88)
+cargo test --test fixtures    # 8 integration tests against fixtures/*.pcap
 cargo test --test fuzz        # 3 deterministic robustness tests (mutated fixtures, random bytes)
 ```
 
