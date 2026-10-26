@@ -1,0 +1,105 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="440" viewBox="0 0 1200 440" role="img" aria-labelledby="t d">
+  <title id="t">packetlens pipeline</title>
+  <desc id="d">A classic pcap file is read by pcap::parse, or frames come from the Linux-only AF_PACKET capture loop in live.rs. decode::decode_packet decodes Ethernet with VLAN, IPv4 or IPv6, then TCP, UDP or ICMP, verifying IPv4, TCP and UDP checksums. flow::FlowTracker::ingest keeps bidirectional connection state and peeks into DNS and TLS ClientHello payloads. explain_flow turns each flow into one English sentence and possible_scans flags half-open SYN scans. Results go to a text report, JSON, or the ratatui viewer.</desc>
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="#A3AAA6"/>
+    </marker>
+  </defs>
+  <rect width="1200" height="440" fill="#0C0D0D"/>
+
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="11" fill="#A3AAA6" letter-spacing="2">
+    <text x="40" y="38">INPUT</text>
+    <text x="250" y="38">PURE PIPELINE  (bytes in, typed data out, no I/O)</text>
+    <text x="1000" y="38">OUTPUT</text>
+  </g>
+  <rect x="236" y="52" width="740" height="348" rx="8" fill="none" stroke="#2A2E2D" stroke-dasharray="5 4"/>
+
+  <g font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">
+    <!-- inputs -->
+    <rect x="40" y="70" width="170" height="92" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="56" y="94" font-size="14" fill="#EEEAE2">capture.pcap</text>
+    <text x="56" y="114" font-size="11" fill="#A3AAA6">classic libpcap</text>
+    <text x="56" y="130" font-size="11" fill="#A3AAA6">µs / ns, LE / BE</text>
+    <text x="56" y="146" font-size="11" fill="#A3AAA6">fixtures/*.pcap</text>
+
+    <rect x="40" y="250" width="170" height="92" rx="6" fill="none" stroke="#2A2E2D" stroke-dasharray="4 3"/>
+    <text x="56" y="274" font-size="14" fill="#EEEAE2">live --iface</text>
+    <text x="56" y="294" font-size="11" fill="#A3AAA6">live::capture_loop</text>
+    <text x="56" y="310" font-size="11" fill="#A3AAA6">AF_PACKET, Linux</text>
+    <text x="56" y="326" font-size="11" fill="#A3AAA6">feature live-capture</text>
+
+    <!-- pcap::parse -->
+    <rect x="256" y="70" width="160" height="92" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="272" y="94" font-size="14" fill="#EEEAE2">pcap::parse</text>
+    <text x="272" y="114" font-size="11" fill="#A3AAA6">GlobalHeader</text>
+    <text x="272" y="130" font-size="11" fill="#A3AAA6">+ frames</text>
+    <text x="272" y="146" font-size="11" fill="#A3AAA6">Ethernet only</text>
+
+    <!-- decode -->
+    <rect x="436" y="70" width="220" height="150" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="452" y="94" font-size="14" fill="#EEEAE2">decode::decode_packet</text>
+    <text x="452" y="120" font-size="12" fill="#EEEAE2">L2  Ethernet (+VLAN)</text>
+    <text x="452" y="140" font-size="12" fill="#EEEAE2">L3  IPv4 · IPv6</text>
+    <text x="452" y="160" font-size="12" fill="#EEEAE2">L4  TCP · UDP · ICMP</text>
+    <text x="452" y="184" font-size="11" fill="#A3AAA6">checksum.rs: RFC 1071</text>
+    <text x="452" y="200" font-size="11" fill="#A3AAA6">→ DecodedPacket</text>
+
+    <!-- flow tracker -->
+    <rect x="676" y="70" width="280" height="150" rx="6" fill="#17191A" stroke="#3FBF8A"/>
+    <text x="692" y="94" font-size="14" fill="#EEEAE2">flow::FlowTracker::ingest</text>
+    <text x="692" y="120" font-size="11" fill="#A3AAA6">bidirectional FlowKey → FlowState</text>
+    <text x="692" y="138" font-size="11" fill="#A3AAA6">TCP handshake / FIN / RST state</text>
+    <text x="692" y="156" font-size="11" fill="#A3AAA6">packet + byte counters per side</text>
+    <text x="692" y="180" font-size="12" fill="#EEEAE2">L7 peek</text>
+    <text x="760" y="180" font-size="11" fill="#A3AAA6">dns::parse</text>
+    <text x="760" y="198" font-size="11" fill="#A3AAA6">tls::parse_client_hello</text>
+    <text x="760" y="212" font-size="10" fill="#A3AAA6">(SNI, ALPN)</text>
+
+    <!-- explain -->
+    <rect x="436" y="268" width="250" height="110" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="452" y="292" font-size="14" fill="#EEEAE2">flow::explain_flow</text>
+    <text x="452" y="314" font-size="11" fill="#A3AAA6">one plain-English sentence</text>
+    <text x="452" y="330" font-size="11" fill="#A3AAA6">per flow</text>
+    <text x="452" y="354" font-size="11" fill="#A3AAA6">display_safe(): escapes SNI</text>
+    <text x="452" y="368" font-size="11" fill="#A3AAA6">and DNS names</text>
+
+    <rect x="706" y="268" width="250" height="110" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="722" y="292" font-size="14" fill="#EEEAE2">possible_scans(n)</text>
+    <text x="722" y="314" font-size="11" fill="#A3AAA6">unanswered SYNs to ≥ n</text>
+    <text x="722" y="330" font-size="11" fill="#A3AAA6">distinct ports, one source</text>
+    <text x="722" y="354" font-size="11" fill="#A3AAA6">--scan-threshold (default 4)</text>
+    <text x="722" y="368" font-size="11" fill="#A3AAA6">→ ScanReport</text>
+
+    <!-- outputs -->
+    <rect x="1000" y="70" width="160" height="60" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="1016" y="96" font-size="14" fill="#EEEAE2">text report</text>
+    <text x="1016" y="116" font-size="11" fill="#A3AAA6">default</text>
+
+    <rect x="1000" y="160" width="160" height="60" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="1016" y="186" font-size="14" fill="#EEEAE2">--json</text>
+    <text x="1016" y="206" font-size="11" fill="#A3AAA6">raw fields</text>
+
+    <rect x="1000" y="250" width="160" height="60" rx="6" fill="#17191A" stroke="#2A2E2D"/>
+    <text x="1016" y="276" font-size="14" fill="#EEEAE2">--tui</text>
+    <text x="1016" y="296" font-size="11" fill="#A3AAA6">tui::AppState</text>
+
+    <text x="1000" y="340" font-size="11" fill="#A3AAA6">live: explain_flow</text>
+    <text x="1000" y="356" font-size="11" fill="#A3AAA6">printed per packet</text>
+  </g>
+
+  <g stroke="#A3AAA6" stroke-width="1.4" fill="none">
+    <line x1="210" y1="116" x2="254" y2="116" marker-end="url(#a)"/>
+    <line x1="416" y1="116" x2="434" y2="116" marker-end="url(#a)"/>
+    <path d="M210 296 L226 296 L226 236 L546 236 L546 222" marker-end="url(#a)"/>
+    <line x1="656" y1="145" x2="674" y2="145" marker-end="url(#a)"/>
+    <path d="M760 220 L760 244 L561 244 L561 266" marker-end="url(#a)"/>
+    <line x1="831" y1="220" x2="831" y2="266" marker-end="url(#a)"/>
+    <path d="M956 322 L980 322"/>
+    <path d="M561 378 L561 390 L980 390 L980 100"/>
+    <path d="M980 100 L998 100" marker-end="url(#a)"/>
+    <path d="M980 190 L998 190" marker-end="url(#a)"/>
+    <path d="M980 280 L998 280" marker-end="url(#a)"/>
+  </g>
+  <text x="250" y="420" font-family="-apple-system,Segoe UI,Helvetica,Arial,sans-serif" font-size="12" fill="#A3AAA6">One decoder for both inputs. Everything inside the dashed box is tested from pcap fixtures with no capture privileges.</text>
+</svg>
